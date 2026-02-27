@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Transaction, Goal } from '../types';
 import { generateMonthlyReport } from '../services/gemini';
-import { FileText, Loader2, Printer, Download, FileJson, Upload, CreditCard, Calendar } from 'lucide-react';
+import { FileText, Loader2, Printer, Download, FileJson, Upload, CreditCard, Calendar, BrainCircuit } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 interface Props {
@@ -34,18 +34,18 @@ const Reports: React.FC<Props> = ({ transactions, onRestoreData }) => {
     const rows = monthTx.map(t => [
         t.date,
         `"${t.description.replace(/"/g, '""')}"`, // Escape quotes
-        t.category,
-        t.subCategory || '',
+        `"${t.category}"`,
+        `"${t.subCategory || ''}"`,
         t.type,
-        t.amount.toFixed(2).replace('.', ','), // PT-BR format
+        `"${t.amount.toFixed(2).replace('.', ',')}"`, // PT-BR format with quotes
         t.paymentMethod || '',
         t.bank || ''
     ]);
 
-    // Add Byte Order Mark (BOM) for Excel to recognize UTF-8
+    // Use semicolon (;) as delimiter for PT-BR Excel compatibility
     const csvContent = '\uFEFF' + [
-        headers.join(','), 
-        ...rows.map(r => r.join(','))
+        headers.join(';'), 
+        ...rows.map(r => r.join(';'))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -121,54 +121,60 @@ const Reports: React.FC<Props> = ({ transactions, onRestoreData }) => {
 
   return (
     <div className="space-y-6">
-      <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow-lg no-print">
-        <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2 text-indigo-400">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 no-print">
+        {/* Report Generation Card */}
+        <div className="lg:col-span-2 bg-slate-800 p-6 rounded-lg border border-slate-700 shadow-lg">
+            <div className="flex items-center gap-2 text-indigo-400 mb-6">
                 <FileText size={24} />
-                <h2 className="text-xl font-bold">Relatórios e Exportação</h2>
+                <h2 className="text-xl font-bold">Relatórios Mensais</h2>
             </div>
-        </div>
 
-        <div className="flex flex-col md:flex-row md:items-end gap-4">
-            <div className="flex-1 max-w-xs">
-                <label className="block text-xs font-medium text-slate-400 mb-1">Mês de Referência</label>
-                <input 
-                    type="month" 
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 focus:outline-none focus:border-indigo-500"
-                />
-            </div>
-            <button
-                onClick={handleGenerate}
-                disabled={loading}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-md font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50 shadow-lg shadow-indigo-900/20"
-            >
-                {loading ? <Loader2 className="animate-spin" size={18} /> : <FileJson size={18} />}
-                Gerar Análise IA
-            </button>
-            
-            <div className="flex-1"></div>
-
-            <div className="flex gap-2">
+            <div className="flex flex-col md:flex-row md:items-end gap-4">
+                <div className="flex-1">
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Mês de Referência</label>
+                    <input 
+                        type="month" 
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 focus:outline-none focus:border-indigo-500"
+                    />
+                </div>
+                <button
+                    onClick={handleGenerate}
+                    disabled={loading}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-md font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50 shadow-lg shadow-indigo-900/20"
+                >
+                    {loading ? <Loader2 className="animate-spin" size={18} /> : <BrainCircuit size={18} />}
+                    Gerar Análise IA
+                </button>
+                
                 <button
                     onClick={handleExportCSV}
-                    className="bg-slate-700 hover:bg-slate-600 text-emerald-400 border border-slate-600 px-4 py-2 rounded-md font-medium flex items-center gap-2 transition-colors"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md font-medium flex items-center gap-2 transition-colors shadow-lg shadow-emerald-900/20"
                     title="Baixar Tabela CSV (Excel)"
                 >
                     <Download size={18} />
-                    CSV
+                    Exportar CSV
                 </button>
+            </div>
+        </div>
 
-                <div className="w-px h-8 bg-slate-700 mx-1"></div>
-
+        {/* Backup & Restore Card */}
+        <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow-lg">
+            <div className="flex items-center gap-2 text-blue-400 mb-6">
+                <FileJson size={24} />
+                <h2 className="text-xl font-bold">Dados & Backup</h2>
+            </div>
+            
+            <div className="space-y-4">
+                <p className="text-xs text-slate-400">Proteja seus dados exportando um arquivo JSON ou restaure um backup anterior.</p>
+                
                 <button
                     onClick={handleExportBackup}
-                    className="bg-slate-700 hover:bg-slate-600 text-blue-400 border border-slate-600 px-4 py-2 rounded-md font-medium flex items-center gap-2 transition-colors"
-                    title="Exportar Backup Completo (JSON)"
+                    className="w-full bg-slate-700 hover:bg-slate-600 text-blue-400 border border-slate-600 px-4 py-3 rounded-md font-medium flex items-center justify-center gap-2 transition-colors"
                 >
-                    <FileJson size={18} />
-                    Exportar Backup
+                    <Download size={18} />
+                    Baixar Backup (JSON)
                 </button>
 
                 <div className="relative">
@@ -179,23 +185,12 @@ const Reports: React.FC<Props> = ({ transactions, onRestoreData }) => {
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
                     <button
-                        className="bg-slate-700 hover:bg-slate-600 text-purple-400 border border-slate-600 px-4 py-2 rounded-md font-medium flex items-center gap-2 transition-colors"
-                        title="Restaurar Backup Anterior"
+                        className="w-full bg-slate-700 hover:bg-slate-600 text-purple-400 border border-slate-600 px-4 py-3 rounded-md font-medium flex items-center justify-center gap-2 transition-colors"
                     >
                         <Upload size={18} />
-                        Restaurar
+                        Restaurar Backup JSON
                     </button>
                 </div>
-                
-                {report && (
-                    <button
-                        onClick={handlePrintPDF}
-                        className="bg-slate-100 hover:bg-white text-slate-900 px-4 py-2 rounded-md font-medium flex items-center gap-2 transition-colors shadow"
-                    >
-                        <Printer size={18} />
-                        Salvar PDF
-                    </button>
-                )}
             </div>
         </div>
       </div>
