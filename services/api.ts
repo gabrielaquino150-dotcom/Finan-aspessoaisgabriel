@@ -1,14 +1,11 @@
 import { User, Transaction, Goal } from '../types';
+import { supabase } from '../lib/supabase';
 
 /**
  * EQUILIBRIUM FINANCIAL - API LAYER
  * 
- * Em um ambiente de produção real, este arquivo conteria chamadas 'axios' ou 'fetch'
- * para o seu backend Node.js + Express.
- * 
- * Como estamos rodando em ambiente local/browser, implementamos uma simulação
- * de banco de dados relacional usando LocalStorage para garantir persistência
- * e integridade de dados multi-usuário.
+ * Este arquivo gerencia a persistência de dados.
+ * Prioriza o Supabase se configurado, caso contrário usa LocalStorage.
  */
 
 const STORAGE_KEYS = {
@@ -22,49 +19,50 @@ const STORAGE_KEYS = {
 
 export const apiAuth = {
   register: async (name: string, email: string, password: string): Promise<User> => {
-    // Simulate API Delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    const users: any[] = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]');
-    
-    if (users.find(u => u.email === email)) {
-      throw new Error("Email já cadastrado no sistema.");
-    }
-
-    // In a real backend, we would use bcrypt.hash(password, 10) here
-    // and NEVER store plain text passwords.
-    const newUser = {
-      id: crypto.randomUUID(),
-      name,
+    const { data, error } = await supabase.auth.signUp({
       email,
-      password, // Simulated storage
-      createdAt: new Date().toISOString()
+      password,
+      options: {
+        data: { name }
+      }
+    });
+
+    if (error) throw error;
+    if (!data.user) throw new Error("Erro ao criar usuário.");
+
+    const newUser: User = {
+      id: data.user.id,
+      name: data.user.user_metadata.name || name,
+      email: data.user.email || email,
+      createdAt: data.user.created_at
     };
 
-    users.push(newUser);
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-    
-    // Return user without password
-    const { password: _, ...userSafe } = newUser;
-    return userSafe;
+    localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(newUser));
+    return newUser;
   },
 
   login: async (email: string, password: string): Promise<User> => {
-    await new Promise(resolve => setTimeout(resolve, 600));
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
 
-    const users: any[] = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]');
-    const user = users.find(u => u.email === email && u.password === password);
+    if (error) throw error;
+    if (!data.user) throw new Error("Usuário não encontrado.");
 
-    if (!user) {
-      throw new Error("Credenciais inválidas.");
-    }
+    const user: User = {
+      id: data.user.id,
+      name: data.user.user_metadata.name || 'Usuário',
+      email: data.user.email || email,
+      createdAt: data.user.created_at
+    };
 
-    const { password: _, ...userSafe } = user;
-    localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(userSafe));
-    return userSafe;
+    localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(user));
+    return user;
   },
 
-  logout: () => {
+  logout: async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem(STORAGE_KEYS.SESSION);
   },
 
@@ -79,47 +77,54 @@ export const apiAuth = {
 export const apiData = {
   // Transactions
   getTransactions: async (userId: string): Promise<Transaction[]> => {
-    const rawData = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-    const allTx: Transaction[] = rawData ? JSON.parse(rawData) : [];
-    
-    // PROTOCOLO DE RESGATE DE DADOS (Data Rescue Protocol):
-    // Como removemos a barreira de login, o sistema agora opera em modo "Single User Local".
-    // Para evitar que dados criados em sessões anteriores (com outros IDs) fiquem ocultos,
-    // nós forçamos a migração de TUDO que está no LocalStorage para o usuário atual.
-    
-    let hasChanges = false;
-    const rescuedTx = allTx.map(t => {
-      // Se a transação pertence a outro ID (ex: sessão antiga) ou não tem ID,
-      // trazemos para o usuário atual.
-      if (t.userId !== userId) {
-        hasChanges = true;
-        return { ...t, userId };
-      }
-      return t;
-    });
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('userId', userId);
 
-    if (hasChanges) {
-      console.log(`[Equilibrium System] Resgatados ${rescuedTx.length} registros para o usuário atual.`);
-      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(rescuedTx));
+      if (error) throw error;
+      if (data && data.length > 0) return data;
+    } catch (e) {
+      console.warn('Supabase fetch failed, falling back to LocalStorage', e);
     }
 
-    // Retorna tudo, pois agora garantimos que tudo pertence ao usuário atual
-    return rescuedTx;
+    const rawData = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+    const allTx: Transaction[] = rawData ? JSON.parse(rawData) : [];
+    return allTx.map(t => ({ ...t, userId }));
   },
 
   saveTransactions: async (newTransactions: Transaction[]): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .upsert(newTransactions);
+
+      if (error) throw error;
+    } catch (e) {
+      console.warn('Supabase save failed, using LocalStorage', e);
+    }
+
     const rawData = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
     const allTx: Transaction[] = rawData ? JSON.parse(rawData) : [];
-    
-    // Safety check: ensure we don't duplicate by ID if something weird happens
     const existingIds = new Set(allTx.map(t => t.id));
     const uniqueNewTx = newTransactions.filter(t => !existingIds.has(t.id));
-
     const updated = [...allTx, ...uniqueNewTx];
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(updated));
   },
 
   deleteTransaction: async (txId: string): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', txId);
+
+      if (error) throw error;
+    } catch (e) {
+      console.warn('Supabase delete failed, using LocalStorage', e);
+    }
+
     const rawData = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
     const allTx: Transaction[] = rawData ? JSON.parse(rawData) : [];
     const updated = allTx.filter(t => t.id !== txId);
@@ -127,6 +132,17 @@ export const apiData = {
   },
 
   updateTransaction: async (transaction: Transaction): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update(transaction)
+        .eq('id', transaction.id);
+
+      if (error) throw error;
+    } catch (e) {
+      console.warn('Supabase update failed, using LocalStorage', e);
+    }
+
     const rawData = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
     const allTx: Transaction[] = rawData ? JSON.parse(rawData) : [];
     const updated = allTx.map(t => t.id === transaction.id ? transaction : t);
@@ -134,42 +150,43 @@ export const apiData = {
   },
 
   restoreData: async (transactions: Transaction[], goals: Goal[]): Promise<void> => {
+    try {
+      await supabase.from('transactions').delete().neq('id', '0'); // Clear all
+      await supabase.from('goals').delete().neq('id', '0'); // Clear all
+      await supabase.from('transactions').insert(transactions);
+      await supabase.from('goals').insert(goals);
+    } catch (e) {
+      console.warn('Supabase restore failed', e);
+    }
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
     localStorage.setItem(STORAGE_KEYS.GOALS, JSON.stringify(goals));
   },
 
   // Goals
   getGoals: async (userId: string): Promise<Goal[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('goals')
+        .select('*')
+        .eq('userId', userId);
+
+      if (error) throw error;
+      if (data && data.length > 0) return data;
+    } catch (e) {
+      console.warn('Supabase goals fetch failed', e);
+    }
+
     const rawData = localStorage.getItem(STORAGE_KEYS.GOALS);
     const allGoals: Goal[] = rawData ? JSON.parse(rawData) : [];
     
-    // PROTOCOLO DE RESGATE DE METAS
-    // Mesma lógica das transações: Traz todas as metas do storage para o usuário atual.
-    let hasChanges = false;
-    const rescuedGoals = allGoals.map(g => {
-        if (g.userId !== userId) {
-            hasChanges = true;
-            return { ...g, userId };
-        }
-        return g;
-    });
-
-    if (hasChanges) {
-        localStorage.setItem(STORAGE_KEYS.GOALS, JSON.stringify(rescuedGoals));
-    }
-
-    const userGoals = rescuedGoals; // Retorna tudo
-    
-    // Se realmente não houver nada no storage (primeiro uso absoluto), cria padrões
-    if (userGoals.length === 0) {
+    if (allGoals.length === 0) {
       const defaults: Goal[] = [
         { id: crypto.randomUUID(), userId, name: 'Reserva de Emergência', targetAmount: 10000, currentAmount: 0, deadline: '2025-12-31', color: '#10b981' },
         { id: crypto.randomUUID(), userId, name: 'Objetivo Curto Prazo', targetAmount: 2000, currentAmount: 0, deadline: '2024-12-31', color: '#3b82f6' }
       ];
-      localStorage.setItem(STORAGE_KEYS.GOALS, JSON.stringify(defaults));
       return defaults;
     }
     
-    return userGoals;
+    return allGoals.map(g => ({ ...g, userId }));
   }
 };

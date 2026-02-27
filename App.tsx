@@ -8,7 +8,9 @@ import ScenarioSimulator from './components/ScenarioSimulator';
 import Reports from './components/Reports';
 import CategoryAnalysis from './components/CategoryAnalysis';
 import CreditCardInvoices from './components/CreditCardInvoices';
-import { LayoutDashboard, Wallet, BrainCircuit, FileBarChart, Menu, X, User as UserIcon, BarChart3, CreditCard } from 'lucide-react';
+import { LayoutDashboard, Wallet, BrainCircuit, FileBarChart, Menu, X, User as UserIcon, BarChart3, CreditCard, LogOut, LogIn } from 'lucide-react';
+import LoginModal from './components/LoginModal';
+import { supabase } from './lib/supabase';
 
 const DEFAULT_USER: User = {
   id: 'default_guest_user',
@@ -24,9 +26,31 @@ const App: React.FC = () => {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
 
-  // Initialize User (Prioritize session if exists to preserve data from previous login, otherwise Default)
-  const [user] = useState<User>(() => apiAuth.getSession() || DEFAULT_USER);
+  // Initialize User
+  const [user, setUser] = useState<User>(() => apiAuth.getSession() || DEFAULT_USER);
+
+  // Sync with Supabase Auth State
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const newUser: User = {
+          id: session.user.id,
+          name: session.user.user_metadata.name || 'Usuário',
+          email: session.user.email || '',
+          createdAt: session.user.created_at
+        };
+        setUser(newUser);
+        localStorage.setItem('eq_session_user', JSON.stringify(newUser));
+      } else if (event === 'SIGNED_OUT') {
+        setUser(DEFAULT_USER);
+        localStorage.removeItem('eq_session_user');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Fetch User Data on Mount
   useEffect(() => {
@@ -111,15 +135,34 @@ const App: React.FC = () => {
         </nav>
 
         <div className="p-4 border-t border-slate-800 bg-slate-900/30">
-           <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-900/30 text-emerald-400 flex items-center justify-center border border-emerald-900">
-                <UserIcon size={20} />
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <p className="text-sm font-medium text-white truncate">{user.name}</p>
-                <p className="text-xs text-slate-500 truncate">{user.email}</p>
-              </div>
-           </div>
+           {user.id === DEFAULT_USER.id ? (
+             <button 
+               onClick={() => setLoginModalOpen(true)}
+               className="w-full flex items-center gap-3 px-4 py-2 bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 rounded-lg hover:bg-emerald-600/30 transition-all"
+             >
+               <LogIn size={18} />
+               <span className="text-sm font-bold">Entrar / Sincronizar</span>
+             </button>
+           ) : (
+             <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-900/30 text-emerald-400 flex items-center justify-center border border-emerald-900">
+                    <UserIcon size={20} />
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <p className="text-sm font-medium text-white truncate">{user.name}</p>
+                    <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => apiAuth.logout()}
+                  className="w-full flex items-center justify-center gap-2 text-xs text-slate-500 hover:text-rose-400 transition-colors py-1"
+                >
+                  <LogOut size={14} />
+                  Sair da Conta
+                </button>
+             </div>
+           )}
         </div>
       </aside>
 
@@ -185,6 +228,16 @@ const App: React.FC = () => {
             )}
           </div>
         </div>
+
+        {loginModalOpen && (
+          <LoginModal 
+            onClose={() => setLoginModalOpen(false)} 
+            onSuccess={(u) => {
+              setUser(u);
+              setLoginModalOpen(false);
+            }} 
+          />
+        )}
       </main>
     </div>
   );
