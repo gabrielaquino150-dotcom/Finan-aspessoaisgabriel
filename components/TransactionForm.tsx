@@ -131,10 +131,11 @@ const TransactionForm: React.FC<Props> = ({ userId, onAddTransaction, editingTra
     }
 
     setImportLoading(true);
-    try {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = async () => {
+    
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = async () => {
+        try {
             const base64 = (reader.result as string).split(',')[1];
             const extracted = await parseInvoicePDF(base64);
             
@@ -158,13 +159,19 @@ const TransactionForm: React.FC<Props> = ({ userId, onAddTransaction, editingTra
             
             setPendingTransactions(mapped);
             setIsImporting(true);
-        };
-    } catch (error) {
-        console.error(error);
-        alert("Erro ao processar fatura. Tente novamente.");
-    } finally {
+        } catch (error) {
+            console.error(error);
+            alert("Erro ao processar fatura. Tente novamente.");
+        } finally {
+            setImportLoading(false);
+            // Reset input
+            e.target.value = '';
+        }
+    };
+    reader.onerror = () => {
         setImportLoading(false);
-    }
+        alert("Erro ao ler o arquivo.");
+    };
   };
 
   const handleConfirmImport = () => {
