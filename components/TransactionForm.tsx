@@ -369,10 +369,15 @@ const TransactionForm: React.FC<Props> = ({ userId, onAddTransaction, editingTra
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     disabled={importLoading}
                 />
-                <button className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded text-xs font-medium transition-colors">
+                <button className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-colors ${importLoading ? 'bg-indigo-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'}`}>
                     {importLoading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                    {importLoading ? 'Processando IA...' : 'Importar Fatura PDF'}
+                    {importLoading ? 'Analisando docs...' : 'Importar Fatura PDF'}
                 </button>
+                {importLoading && (
+                    <p className="absolute top-full right-0 mt-2 text-[10px] text-indigo-400 font-medium animate-pulse whitespace-nowrap">
+                        A IA está extraindo os dados, aguarde...
+                    </p>
+                )}
             </div>
         )}
       </div>
