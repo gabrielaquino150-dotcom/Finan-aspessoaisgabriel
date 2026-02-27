@@ -1,13 +1,14 @@
 import React from 'react';
 import { Transaction, PAYMENT_METHODS } from '../types';
-import { Trash2, Repeat, Layers } from 'lucide-react';
+import { Trash2, Repeat, Layers, Edit2 } from 'lucide-react';
 
 interface Props {
   transactions: Transaction[];
   onDelete: (id: string) => void;
+  onEdit: (t: Transaction) => void;
 }
 
-const TransactionList: React.FC<Props> = ({ transactions, onDelete }) => {
+const TransactionList: React.FC<Props> = ({ transactions, onDelete, onEdit }) => {
   // Sort by date descending
   const sorted = [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -33,7 +34,7 @@ const TransactionList: React.FC<Props> = ({ transactions, onDelete }) => {
         <table className="w-full text-left text-sm text-slate-400">
           <thead className="bg-slate-900 text-slate-200 uppercase font-medium">
             <tr>
-              <th className="px-6 py-4">Data</th>
+              <th className="px-6 py-4">Data Compra / Pagto</th>
               <th className="px-6 py-4">Descrição</th>
               <th className="px-6 py-4">Categoria</th>
               <th className="px-6 py-4">Pagamento</th>
@@ -45,8 +46,17 @@ const TransactionList: React.FC<Props> = ({ transactions, onDelete }) => {
           <tbody className="divide-y divide-slate-700">
             {sorted.map((t) => (
               <tr key={t.id} className="hover:bg-slate-750 transition-colors">
-                <td className="px-6 py-4 font-mono text-slate-300">
-                    {formatDate(t.date)}
+                <td className="px-6 py-4 font-mono">
+                    <div className="flex flex-col">
+                        <span className="text-slate-100 text-xs" title="Data da Compra">
+                            {formatDate(t.originalDate || t.date)}
+                        </span>
+                        {t.paymentMethod === 'CREDIT_CARD' && t.date !== (t.originalDate || t.date) && (
+                            <span className="text-[10px] text-orange-400 font-bold" title="Data do Pagamento (Vencimento)">
+                                → {formatDate(t.date)}
+                            </span>
+                        )}
+                    </div>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2">
@@ -80,12 +90,22 @@ const TransactionList: React.FC<Props> = ({ transactions, onDelete }) => {
                   {t.type === 'EXPENSE' ? '-' : '+'}R${t.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                 </td>
                 <td className="px-6 py-4 text-center">
-                  <button 
-                    onClick={() => onDelete(t.id)}
-                    className="text-slate-500 hover:text-rose-500 transition-colors"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex items-center justify-center gap-3">
+                    <button 
+                      onClick={() => onEdit(t)}
+                      className="text-slate-500 hover:text-blue-400 transition-colors"
+                      title="Editar"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button 
+                      onClick={() => onDelete(t.id)}
+                      className="text-slate-500 hover:text-rose-500 transition-colors"
+                      title="Excluir"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

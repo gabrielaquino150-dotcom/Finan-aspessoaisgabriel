@@ -126,6 +126,18 @@ export const apiData = {
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(updated));
   },
 
+  updateTransaction: async (transaction: Transaction): Promise<void> => {
+    const rawData = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+    const allTx: Transaction[] = rawData ? JSON.parse(rawData) : [];
+    const updated = allTx.map(t => t.id === transaction.id ? transaction : t);
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(updated));
+  },
+
+  restoreData: async (transactions: Transaction[], goals: Goal[]): Promise<void> => {
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+    localStorage.setItem(STORAGE_KEYS.GOALS, JSON.stringify(goals));
+  },
+
   // Goals
   getGoals: async (userId: string): Promise<Goal[]> => {
     const rawData = localStorage.getItem(STORAGE_KEYS.GOALS);

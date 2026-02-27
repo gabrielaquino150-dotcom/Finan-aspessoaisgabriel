@@ -6,7 +6,9 @@ import TransactionList from './components/TransactionList';
 import Dashboard from './components/Dashboard';
 import ScenarioSimulator from './components/ScenarioSimulator';
 import Reports from './components/Reports';
-import { LayoutDashboard, Wallet, BrainCircuit, FileBarChart, Menu, X, User as UserIcon } from 'lucide-react';
+import CategoryAnalysis from './components/CategoryAnalysis';
+import CreditCardInvoices from './components/CreditCardInvoices';
+import { LayoutDashboard, Wallet, BrainCircuit, FileBarChart, Menu, X, User as UserIcon, BarChart3, CreditCard } from 'lucide-react';
 
 const DEFAULT_USER: User = {
   id: 'default_guest_user',
@@ -17,9 +19,10 @@ const DEFAULT_USER: User = {
 
 const App: React.FC = () => {
   // App State
-  const [view, setView] = useState<'DASHBOARD' | 'TRANSACTIONS' | 'SIMULATOR' | 'REPORTS'>('DASHBOARD');
+  const [view, setView] = useState<'DASHBOARD' | 'TRANSACTIONS' | 'SIMULATOR' | 'REPORTS' | 'ANALYSIS' | 'CREDIT_CARD'>('DASHBOARD');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Initialize User (Prioritize session if exists to preserve data from previous login, otherwise Default)
@@ -41,9 +44,21 @@ const App: React.FC = () => {
     setTransactions(prev => [...prev, ...newTx]);
   };
 
+  const handleUpdateTransaction = async (updatedTx: Transaction) => {
+    await apiData.updateTransaction(updatedTx);
+    setTransactions(prev => prev.map(t => t.id === updatedTx.id ? updatedTx : t));
+    setEditingTransaction(null);
+  };
+
   const handleDeleteTransaction = async (id: string) => {
     await apiData.deleteTransaction(id);
     setTransactions(prev => prev.filter(t => t.id !== id));
+  };
+
+  const handleRestoreData = async (newTx: Transaction[], newGoals: Goal[]) => {
+    await apiData.restoreData(newTx, newGoals);
+    setTransactions(newTx);
+    setGoals(newGoals);
   };
 
   const NavItem = ({ id, label, icon: Icon }: { id: typeof view, label: string, icon: any }) => (
@@ -88,6 +103,8 @@ const App: React.FC = () => {
 
         <nav className="p-4 space-y-2 flex-1">
           <NavItem id="DASHBOARD" label="Painel" icon={LayoutDashboard} />
+          <NavItem id="ANALYSIS" label="Análise por Categoria" icon={BarChart3} />
+          <NavItem id="CREDIT_CARD" label="Faturas de Cartão" icon={CreditCard} />
           <NavItem id="TRANSACTIONS" label="Transações" icon={Wallet} />
           <NavItem id="SIMULATOR" label="Simulador de Cenários" icon={BrainCircuit} />
           <NavItem id="REPORTS" label="Relatórios & Export" icon={FileBarChart} />
@@ -133,8 +150,21 @@ const App: React.FC = () => {
             
             {view === 'TRANSACTIONS' && (
               <>
-                <TransactionForm userId={user.id} onAddTransaction={handleAddTransactions} />
-                <TransactionList transactions={transactions} onDelete={handleDeleteTransaction} />
+                <TransactionForm 
+                  userId={user.id} 
+                  onAddTransaction={handleAddTransactions} 
+                  editingTransaction={editingTransaction}
+                  onUpdateTransaction={handleUpdateTransaction}
+                  onCancelEdit={() => setEditingTransaction(null)}
+                />
+                <TransactionList 
+                  transactions={transactions} 
+                  onDelete={handleDeleteTransaction} 
+                  onEdit={(t) => {
+                    setEditingTransaction(t);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
               </>
             )}
 
@@ -142,8 +172,16 @@ const App: React.FC = () => {
               <ScenarioSimulator transactions={transactions} goals={goals} />
             )}
 
+            {view === 'ANALYSIS' && (
+              <CategoryAnalysis transactions={transactions} />
+            )}
+
+            {view === 'CREDIT_CARD' && (
+              <CreditCardInvoices transactions={transactions} />
+            )}
+
             {view === 'REPORTS' && (
-              <Reports transactions={transactions} />
+              <Reports transactions={transactions} onRestoreData={handleRestoreData} />
             )}
           </div>
         </div>

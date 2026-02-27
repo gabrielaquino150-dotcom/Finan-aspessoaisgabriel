@@ -6,9 +6,12 @@ import { parseInvoicePDF } from '../services/invoiceParser';
 interface Props {
   userId: string;
   onAddTransaction: (t: Transaction[]) => void;
+  editingTransaction?: Transaction | null;
+  onUpdateTransaction?: (t: Transaction) => void;
+  onCancelEdit?: () => void;
 }
 
-const TransactionForm: React.FC<Props> = ({ userId, onAddTransaction }) => {
+const TransactionForm: React.FC<Props> = ({ userId, onAddTransaction, editingTransaction, onUpdateTransaction, onCancelEdit }) => {
   const [type, setType] = useState<TransactionType>('EXPENSE');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
@@ -30,6 +33,32 @@ const TransactionForm: React.FC<Props> = ({ userId, onAddTransaction }) => {
   const [isImporting, setIsImporting] = useState(false);
   const [pendingTransactions, setPendingTransactions] = useState<(Transaction & { _isNewInstallmentPlan?: boolean; _installmentsCount?: number })[]>([]);
   const [importLoading, setImportLoading] = useState(false);
+
+  // Load editing transaction
+  useEffect(() => {
+    if (editingTransaction) {
+      setType(editingTransaction.type);
+      setDescription(editingTransaction.description.replace(' [Fatura Cartão]', '').replace(/\(\d+\/\d+\)/, '').trim());
+      setAmount(editingTransaction.amount.toString());
+      setDate(editingTransaction.originalDate || editingTransaction.date);
+      setCategory(editingTransaction.category);
+      setSubCategory(editingTransaction.subCategory || '');
+      setIsFixed(editingTransaction.isFixed);
+      setPaymentMethod(editingTransaction.paymentMethod || PAYMENT_METHODS[0].value);
+      setBankValue(editingTransaction.bank || BANKS[0].value);
+      setIsInstallment(false); // We don't support re-parceling from edit yet to avoid complexity
+    } else {
+      // Reset form
+      setType('EXPENSE');
+      setDescription('');
+      setAmount('');
+      setDate(new Date().toISOString().split('T')[0]);
+      setCategory(DEFAULT_CATEGORIES.EXPENSE[0]);
+      setSubCategory('');
+      setIsFixed(false);
+      setIsInstallment(false);
+    }
+  }, [editingTransaction]);
 
   // Calcula a data real de pagamento baseada no cartão
   const calculateCardDueDate = (purchaseDateStr: string, bankConfig: BankConfig): Date => {
@@ -250,6 +279,23 @@ const TransactionForm: React.FC<Props> = ({ userId, onAddTransaction }) => {
         isCard = true;
     }
 
+    if (editingTransaction && onUpdateTransaction) {
+        onUpdateTransaction({
+            ...editingTransaction,
+            date: isCard ? baseDateObj.toISOString().split('T')[0] : date,
+            description: isCard ? `${description} [Fatura Cartão]` : description,
+            amount: numAmount,
+            type,
+            category,
+            subCategory,
+            isFixed,
+            paymentMethod: type === 'EXPENSE' ? paymentMethod : undefined,
+            bank: type === 'EXPENSE' && isCard ? selectedBank?.label : undefined,
+            originalDate: date
+        });
+        return;
+    }
+
     if (isInstallment && type === 'EXPENSE') {
       const installmentAmount = numAmount / installments;
       
@@ -311,22 +357,24 @@ const TransactionForm: React.FC<Props> = ({ userId, onAddTransaction }) => {
       <div className="flex items-center justify-between mb-6 text-emerald-400">
         <div className="flex items-center gap-2">
             <Calculator size={20} />
-            <h2 className="font-semibold text-lg">Nova Transação</h2>
+            <h2 className="font-semibold text-lg">{editingTransaction ? 'Editar Transação' : 'Nova Transação'}</h2>
         </div>
         
-        <div className="relative">
-            <input 
-                type="file" 
-                accept="application/pdf" 
-                onChange={handleFileUpload}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                disabled={importLoading}
-            />
-            <button className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded text-xs font-medium transition-colors">
-                {importLoading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                {importLoading ? 'Processando IA...' : 'Importar Fatura PDF'}
-            </button>
-        </div>
+        {!editingTransaction && (
+            <div className="relative">
+                <input 
+                    type="file" 
+                    accept="application/pdf" 
+                    onChange={handleFileUpload}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    disabled={importLoading}
+                />
+                <button className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded text-xs font-medium transition-colors">
+                    {importLoading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                    {importLoading ? 'Processando IA...' : 'Importar Fatura PDF'}
+                </button>
+            </div>
+        )}
       </div>
 
       {isImporting && pendingTransactions.length > 0 ? (
@@ -696,13 +744,24 @@ const TransactionForm: React.FC<Props> = ({ userId, onAddTransaction }) => {
           </div>
         )}
 
-        <button
-          type="submit"
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 rounded shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
-        >
-          <Plus size={18} />
-          Registrar
-        </button>
+        <div className="flex gap-3">
+          {editingTransaction && (
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-medium py-2.5 rounded transition-all"
+            >
+              Cancelar
+            </button>
+          )}
+          <button
+            type="submit"
+            className={`flex-[2] ${editingTransaction ? 'bg-blue-600 hover:bg-blue-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white font-medium py-2.5 rounded shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2`}
+          >
+            {editingTransaction ? <Check size={18} /> : <Plus size={18} />}
+            {editingTransaction ? 'Salvar Alterações' : 'Registrar'}
+          </button>
+        </div>
       </form>
       )}
     </div>

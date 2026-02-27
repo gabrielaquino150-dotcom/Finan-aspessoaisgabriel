@@ -18,7 +18,7 @@ const Dashboard: React.FC<Props> = ({ transactions }) => {
   });
 
   const monthData = useMemo(() => {
-    return transactions.filter(t => (t.originalDate || t.date).startsWith(selectedMonth));
+    return transactions.filter(t => t.date.startsWith(selectedMonth));
   }, [transactions, selectedMonth]);
 
   const globalBalance = useMemo(() => {
@@ -332,7 +332,7 @@ const Dashboard: React.FC<Props> = ({ transactions }) => {
              <span className="w-2 h-6 bg-purple-500 rounded-sm"></span>
              Previsão de Gastos (Próximos Meses)
           </h3>
-          <div className="h-64 w-full">
+          <div className="h-48 w-full mb-6">
             <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={futureProjections} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
@@ -353,9 +353,24 @@ const Dashboard: React.FC<Props> = ({ transactions }) => {
                 </AreaChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-[10px] text-slate-500 mt-4 uppercase tracking-wider text-center">
-            Inclui parcelamentos já registrados e despesas fixas futuras
-          </p>
+          
+          <div className="space-y-3">
+            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-2">Próximas Parcelas</p>
+            {transactions
+                .filter(t => t.installmentCurrent && t.date > new Date().toISOString().split('T')[0])
+                .sort((a, b) => a.date.localeCompare(b.date))
+                .slice(0, 3)
+                .map(t => (
+                    <div key={t.id} className="flex items-center justify-between text-xs bg-slate-900/30 p-2 rounded border border-slate-700/50">
+                        <div className="overflow-hidden">
+                            <p className="text-slate-200 font-medium truncate">{t.description}</p>
+                            <p className="text-slate-500">{formatDateBR(t.date)}</p>
+                        </div>
+                        <span className="text-slate-100 font-bold">R${t.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                    </div>
+                ))
+            }
+          </div>
         </div>
       </div>
     </div>
